@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-import resource
+from . import resource_shim as resource
 import sys
 
 import psutil
