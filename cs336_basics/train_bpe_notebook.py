@@ -1,7 +1,12 @@
+"""
+Helper function for tests.ipynb
+"""
+
 from concurrent.futures import ProcessPoolExecutor, as_completed
-# from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import regex as re
 import os
+from typing import BinaryIO
 PAT = re.compile(r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
 
 def find_chunk_boundaries(
@@ -181,9 +186,3 @@ def TrainBPE(input_path, vocab_size, special_tokens):
                 pair_index[p].add(t)
 
     return vocab, merges
-
-if __name__ == "__main__":
-    from multiprocessing import freeze_support
-    freeze_support()
-    print(os.listdir('.'))
-    TrainBPE('./data/owt_train.txt', 30000, ["<|endoftext|>"])
