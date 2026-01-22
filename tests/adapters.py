@@ -729,7 +729,7 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
         Float[Tensor,"..."]: of with the same shape as `in_features` with the output of applying
         SiLU to each element.
     """
-    raise NotImplementedError
+    return in_features * torch.sigmoid(in_features)
 
 
 def run_get_batch(
@@ -752,7 +752,16 @@ def run_get_batch(
         is the sampled input sequences, and the second tuple item is the corresponding
         language modeling labels.
     """
-    raise NotImplementedError
+    dataset_t = torch.as_tensor(dataset, dtype=torch.long, device=device)
+    max_start = dataset_t.shape[0] - context_length
+    assert max_start > 0, "context_length must be smaller than dataset length"
+
+    start = torch.randint(0, max_start, (batch_size,), device=dataset_t.device)
+    offsets = torch.arange(context_length, device=dataset_t.device)
+
+    x = dataset_t[start.unsqueeze(1) + offsets]
+    y = dataset_t[start.unsqueeze(1) + offsets + 1]
+    return x, y
 
 def SoftMax(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, " ..."]:
     # Edge case: if negative infinity mask is applied to the entire row, return all 0's instead of NaNs
@@ -792,7 +801,9 @@ def run_cross_entropy(
         Float[Tensor, ""]: The average cross-entropy loss across examples.
     """
     
-    raise NotImplementedError
+    logsumexp = torch.logsumexp(inputs, dim=-1)
+    nll = -inputs.gather(dim=-1, index=targets.unsqueeze(-1)).squeeze(-1) + logsumexp
+    return nll.mean()
 
 
 def run_gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm: float) -> None:
@@ -804,14 +815,14 @@ def run_gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm:
 
     The gradients of the parameters (parameter.grad) should be modified in-place.
     """
-    raise NotImplementedError
+    torch.nn.utils.clip_grad_norm_(parameters, max_l2_norm)
 
 
 def get_adamw_cls() -> Any:
     """
     Returns a torch.optim.Optimizer that implements AdamW.
     """
-    raise NotImplementedError
+    return torch.optim.AdamW
 
 
 def run_get_lr_cosine_schedule(
@@ -839,7 +850,18 @@ def run_get_lr_cosine_schedule(
     Returns:
         Learning rate at the given iteration under the specified schedule.
     """
-    raise NotImplementedError
+    if warmup_iters > 0 and it <= warmup_iters:
+        return max_learning_rate * (it / warmup_iters)
+
+    if it <= cosine_cycle_iters:
+        decay_iters = cosine_cycle_iters - warmup_iters
+        if decay_iters <= 0:
+            return min_learning_rate
+        t = it - warmup_iters
+        cosine = 0.5 * (1.0 + math.cos(math.pi * t / decay_iters))
+        return min_learning_rate + (max_learning_rate - min_learning_rate) * cosine
+
+    return min_learning_rate
 
 
 def run_save_checkpoint(
@@ -858,7 +880,12 @@ def run_save_checkpoint(
             we've completed.
         out (str | os.PathLike | BinaryIO | IO[bytes]): Path or file-like object to serialize the model, optimizer, and iteration to.
     """
-    raise NotImplementedError
+    checkpoint = {
+        "model_state_dict": model.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict(),
+        "iteration": iteration,
+    }
+    torch.save(checkpoint, out)
 
 
 def run_load_checkpoint(
@@ -879,7 +906,10 @@ def run_load_checkpoint(
     Returns:
         int: the previously-serialized number of iterations.
     """
-    raise NotImplementedError
+    checkpoint = torch.load(src)
+    model.load_state_dict(checkpoint["model_state_dict"])
+    optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+    return int(checkpoint["iteration"])
 
 from collections.abc import Iterable, Iterator
 import regex as re

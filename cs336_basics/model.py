@@ -129,7 +129,7 @@ def scaled_dot_product_attention(
     return attention
 
 class MultiHeadSelfAttention(torch.nn.Module):
-    def __init__(self, d_model: int, num_heads: int, theta: float = 1009, max_seq_len: int=2048):
+    def __init__(self, d_model: int, num_heads: int, max_seq_len: int=2048, theta: float = 1009):
         super().__init__()
         self.d_model = d_model
         self.num_heads = num_heads
@@ -149,20 +149,22 @@ class MultiHeadSelfAttention(torch.nn.Module):
         seq_len = x.shape[-2]
         QKV = self.W_QKV(x)
         QKV = rearrange(QKV, " ... seq_len (qkv num_heads d_k) -> ... seq_len qkv num_heads d_k", qkv=3, num_heads=self.num_heads, d_k=self.d_k)
-        Q = rearrange(QKV[..., 0,:,:,:], " ... seq_len num_heads d_k -> ... num_heads seq_len d_k")
-        K = rearrange(QKV[..., 1,:,:,:], " ... seq_len num_heads d_k -> ... num_heads seq_len d_k")
-        V = rearrange(QKV[..., 3,:,:,:], " ... seq_len num_heads d_k -> ... num_heads seq_len d_k")
+        Q = rearrange(QKV[..., 0,:,:], " ... seq_len num_heads d_k -> ... num_heads seq_len d_k")
+        K = rearrange(QKV[..., 1,:,:], " ... seq_len num_heads d_k -> ... num_heads seq_len d_k")
+        V = rearrange(QKV[..., 2,:,:], " ... seq_len num_heads d_k -> ... num_heads seq_len d_k")
 
-        Q = self.rope(Q, token_positions)
-        K = self.rope(K, token_positions)
+        if token_positions is not None:
+            Q = self.rope(Q, token_positions)
+            K = self.rope(K, token_positions)
         mask = torch.empty((seq_len, seq_len), dtype=bool)
         for i in range(seq_len):
-            for j in range(0, i):
-                mask[i][j] = False
-            for j in range(i, seq_len):
+            for j in range(0, i + 1):
                 mask[i][j] = True
+            for j in range(i + 1, seq_len):
+                mask[i][j] = False
         
         multihead = scaled_dot_product_attention(Q, K, V, mask)
+        multihead = rearrange(multihead, "... num_heads seq_len d_k -> ... seq_len (num_heads d_k)")
         return self.W_O(multihead)
 
 class TransformerBlock(torch.nn.Module):
